@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>College Directory Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        .login-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .login-container h2 {
+            margin-bottom: 20px;
+        }
+        .login-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .login-container input, .login-container select, .login-container button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h2>Login</h2>
+        <form id="loginForm">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+            <label for="role">Role</label>
+            <select id="role" name="role" required>
+                <option value="STUDENT">Student</option>
+                <option value="FACULTY_MEMBER">Faculty Member</option>
+                <option value="ADMINISTRATOR">Administrator</option>
+            </select>
+            <button type="submit">Login</button>
+        </form>
+        <div id="error" style="color: red; display: none;">Invalid credentials. Please try again.</div>
+    </div>
+    <script src="login.js"></script>
+</body>
+</html>
+
+#LOGINJS
+
+document.getElementById('loginForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const role = document.getElementById('role').value;
+    
+    fetch('http://localhost:8080/api/login', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password, role })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Redirect to respective dashboard
+            window.location.href = `${role.toLowerCase()}_dashboard.html`;
+        } else {
+            document.getElementById('error').style.display = 'block';
+        }
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+#STUDENTDASHBOARD
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Dashboard</title>
+    <style>
+        /* Add your styles here */
+    </style>
+</head>
+<body>
+    <h2>Student Dashboard</h2>
+    <div id="profile"></div>
+    <div id="search"></div>
+    <div id="advisors"></div>
+    <script src="student_dashboard.js"></script>
+</body>
+</html>
+
+#STUDENTDASHBOARD.JS
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch and display student profile
+    fetch('http://localhost:8080/api/student/profile')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('profile').innerHTML = `
+                <h3>Profile</h3>
+                <p>Name: ${data.name}</p>
+                <p>Email: ${data.email}</p>
+                <p>Department: ${data.department}</p>
+            `;
+        });
+
+    // Implement search functionality
+    const searchDiv = document.getElementById('search');
+    searchDiv.innerHTML = `
+        <h3>Search Students</h3>
+        <input type="text" id="searchInput" placeholder="Search by name, department, or year">
+        <button onclick="searchStudents()">Search</button>
+        <div id="searchResults"></div>
+    `;
+
+    window.searchStudents = function() {
+        const query = document.getElementById('searchInput').value;
+        fetch(`http://localhost:8080/api/student/search?query=${query}`)
+            .then(response => response.json())
+            .then(data => {
+                const resultsDiv = document.getElementById('searchResults');
+                resultsDiv.innerHTML = data.map(student => `
+                    <p>${student.name} - ${student.department} - ${student.year}</p>
+                `).join('');
+            });
+    };
+
+    // Fetch and display advisors
+    fetch('http://localhost:8080/api/student/advisors')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('advisors').innerHTML = `
+                <h3>Faculty Advisors</h3>
+                ${data.map(advisor => `
+                    <p>${advisor.name} - ${advisor.email}</p>
+                `).join('')}
+            `;
+        });
+});
+
+#APPLICATION PROPERTIES
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/college_directory
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.security.jwt.secret=your_secret_key
+
+@Entity
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String username;
+    private String password;
+    private String role;
+    private String name;
+    private String email;
+    private String phone;
+    // Getters and setters
+}
+
+@Repository
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+@Service
+public class UserService {
+    @Autowired
+    private UserRepository userRepository;
+
+    public User authenticate(String username, String password, String role) {
+        return userRepository.findByUsername(username)
+                .filter(user -> user.getPassword().equals(password) && user.getRole().equals(role))
+                .orElse(null);
+    }
+}
+@RestController
+@RequestMapping("/api")
+public class UserController {
+    @Autowired
+    private UserService userService;
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+        User user = userService.authenticate(loginRequest.getUsername(), loginRequest.getPassword(), loginRequest.getRole());
+        if (user != null) {
+            return ResponseEntity.ok(Map.of("success", true));
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false));
+        }
+    }
+}
+
+#LOGINREQUEST
+
+public class LoginRequest {
+    private String username;
+    private String password;
+    private String role;
+    // Getters and setters
+}
+
